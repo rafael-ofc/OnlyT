@@ -14,6 +14,7 @@ using Services.Options;
 using Services.TalkSchedule;
 using Services.Timer;
 using System;
+using System.IO;
 using System.Net;
 using System.Threading.Tasks;
 using Throttling;
@@ -113,6 +114,7 @@ internal sealed class HttpServer : IHttpServer, IDisposable
         _listener.Prefixes.Add($"http://{ipAddress}:{_port}/timers/");
         _listener.Prefixes.Add($"http://{ipAddress}:{_port}/data/");
         _listener.Prefixes.Add($"http://{ipAddress}:{_port}/api/");
+        _listener.Prefixes.Add($"http://{ipAddress}:{_port}/assets/");
     }
 
     private void StartListening()
@@ -190,6 +192,10 @@ internal sealed class HttpServer : IHttpServer, IDisposable
 
                                 case "api":
                                     HandleApiRequest(context.Request, response);
+                                    break;
+                                
+                                case "assets":
+                                    HandleStaticAsset(context.Request, response);
                                     break;
 
                                 default:
@@ -284,5 +290,51 @@ internal sealed class HttpServer : IHttpServer, IDisposable
     private void OnRequestForTimerDataEvent(TimerInfoEventArgs timerInfo)
     {
         RequestForTimerDataEvent?.Invoke(this, timerInfo);
+    }
+
+    private void HandleStaticAsset(HttpListenerRequest request, HttpListenerResponse response)
+    {
+        var relativePath = request.Url!.AbsolutePath
+            .Replace("/assets/", "")
+            .Replace('/', Path.DirectorySeparatorChar);
+
+        var assetsRoot = Path.Combine(AppContext.BaseDirectory, "assets");
+        var filePath = Path.Combine(assetsRoot, relativePath);
+
+        var fullPath = Path.GetFullPath(filePath);
+        if (!fullPath.StartsWith(assetsRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            response.StatusCode = (int)HttpStatusCode.Forbidden;
+            return;
+        }
+
+        if (!File.Exists(fullPath))
+        {
+            response.StatusCode = (int)HttpStatusCode.NotFound;
+            return;
+        }
+
+        var bytes = File.ReadAllBytes(fullPath);
+        response.ContentType = GetContentType(fullPath);
+        response.ContentLength64 = bytes.Length;
+
+        using var output = response.OutputStream;
+        output.Write(bytes, 0, bytes.Length);
+    }
+    
+    private static string GetContentType(string filePath)
+    {
+        return Path.GetExtension(filePath).ToLower() switch
+        {
+            ".css" => "text/css",
+            ".js" => "application/javascript",
+            ".json" => "application/json",
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".gif" => "image/gif",
+            ".svg" => "image/svg+xml",
+            ".html" => "text/html",
+            _ => "application/octet-stream"
+        };
     }
 }

@@ -99,4 +99,10 @@
 		<NativeLibs Remove="Processing.NDI.Lib.x64.dll" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<Content Include="assets\**\*">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
+
 </Project>
